@@ -127,7 +127,6 @@ type BackendsConfig map[string]*BackendConfig
 type RoutingStrategy string
 
 func (b *BackendGroupConfig) ValidateRoutingStrategy(bgName string) bool {
-
 	// If Consensus Aware is Set and Routing RoutingStrategy is populated fail
 	if b.ConsensusAware && b.RoutingStrategy != "" {
 		log.Warn("consensus_aware is now deprecated, please use routing_strategy = consensus_aware")
@@ -225,7 +224,7 @@ type Config struct {
 	BackendGroups           BackendGroupsConfig     `toml:"backend_groups"`
 	RPCMethodMappings       map[string]string       `toml:"rpc_method_mappings"`
 	WSMethodWhitelist       []string                `toml:"ws_method_whitelist"`
-	AllowedHeadersToForward []string                `toml:"allowed_headers_to_forward"`
+	AllowedDynamicHeaders   []string                `toml:"allowed_dynamic_headers"`
 	WhitelistErrorMessage   string                  `toml:"whitelist_error_message"`
 	SenderRateLimit         SenderRateLimitConfig   `toml:"sender_rate_limit"`
 	InteropValidationConfig InteropValidationConfig `toml:"interop_validation"`

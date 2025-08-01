@@ -87,7 +87,7 @@ type Server struct {
 	rateLimitHeader         string
 	interopValidatingConfig InteropValidationConfig
 	interopStrategy         InteropStrategy
-	headersForwarder        *HeadersForwarder
+	allowedDynamicHeaders   []string
 }
 
 type limiterFunc func(method string) bool
@@ -114,7 +114,7 @@ func NewServer(
 	limiterFactory limiterFactoryFunc,
 	interopValidatingConfig InteropValidationConfig,
 	interopStrategy InteropStrategy,
-	headersForwarder *HeadersForwarder,
+	allowedDynamicHeaders []string,
 ) (*Server, error) {
 	if cache == nil {
 		cache = &NoopRPCCache{}
@@ -215,7 +215,7 @@ func NewServer(
 		rateLimitHeader:         rateLimitHeader,
 		interopValidatingConfig: interopValidatingConfig,
 		interopStrategy:         interopStrategy,
-		headersForwarder:        headersForwarder,
+		allowedDynamicHeaders:   allowedDynamicHeaders,
 	}, nil
 }
 
@@ -749,15 +749,23 @@ func (s *Server) populateContext(w http.ResponseWriter, r *http.Request) context
 		ctx = context.WithValue(ctx, ContextKeyAuth, s.authenticatedPaths[authorization]) // nolint:staticcheck
 	}
 
-	headersToForward, err := s.headersForwarder.Forward(r.Header)
-	if err != nil {
-		log.Error("error select and forward headers", "err", err)
-		writeRPCError(ctx, w, nil, ErrInternal)
-		return nil
-	}
+	bts_, _ := json.Marshal(s.allowedDynamicHeaders)
+	log.Info("allowed dynamic headers", "headers", string(bts_), "headers_len", len(s.allowedDynamicHeaders))
+	bts_, _ = json.Marshal(r.Header)
+	log.Info("request headers", "headers", string(bts_), "headers_len", len(r.Header))
+	if len(s.allowedDynamicHeaders) > 0 {
+		filteredHeaderValues := make(map[string][]string)
+		for _, h := range s.allowedDynamicHeaders {
+			values := r.Header.Values(h)
+			if len(values) > 0 {
+				filteredHeaderValues[h] = values
+			}
+		}
+		if len(filteredHeaderValues) > 0 {
+			log.Info("proxying dynamic headers")
+			ctx = context.WithValue(ctx, ContextKeyHeadersToForward, filteredHeaderValues) // nolint:staticcheck
+		}
 
-	if len(headersToForward) > 0 {
-		ctx = context.WithValue(ctx, ContextKeyHeadersToForward, headersToForward) // nolint:staticcheck
 	}
 
 	return context.WithValue(
@@ -976,8 +984,8 @@ func GetXForwardedFor(ctx context.Context) string {
 	return xff
 }
 
-func GetHeadersToForward(ctx context.Context) http.Header {
-	headers, ok := ctx.Value(ContextKeyHeadersToForward).(http.Header)
+func GetHeadersToForward(ctx context.Context) map[string][]string {
+	headers, ok := ctx.Value(ContextKeyHeadersToForward).(map[string][]string)
 	if !ok {
 		return nil
 	}

@@ -137,7 +137,6 @@ func TestRPCCacheImmutableRPCs(t *testing.T) {
 			cachedRes, err = cache.GetRPC(ctxWithHeaders, rpc.req)
 			require.NoError(t, err)
 			require.Equal(t, rpc.res, cachedRes)
-
 		})
 	}
 }
@@ -222,7 +221,6 @@ func TestRPCCacheUnsupportedMethod(t *testing.T) {
 			require.Nil(t, cachedRes)
 		})
 	}
-
 }
 
 type errorCache struct{}

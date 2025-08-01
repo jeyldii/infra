@@ -40,7 +40,7 @@ func (e *StaticMethodHandler) key(req *RPCReq, headersToForward http.Header) (st
 		for _, h := range headers {
 			values, ok := headersToForward[h]
 			if !ok {
-				return "", ErrAllowedHeaderNotFound
+				return "", fmt.Errorf("error forwarding headers")
 			}
 
 			valuesCopy := slices.Clone(values)

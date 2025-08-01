@@ -470,10 +470,12 @@ const proxydHealthzMethod = "proxyd_healthz"
 
 const ConsensusGetReceiptsMethod = "consensus_getReceipts"
 
-const ReceiptsTargetDebugGetRawReceipts = "debug_getRawReceipts"
-const ReceiptsTargetAlchemyGetTransactionReceipts = "alchemy_getTransactionReceipts"
-const ReceiptsTargetParityGetTransactionReceipts = "parity_getBlockReceipts"
-const ReceiptsTargetEthGetTransactionReceipts = "eth_getBlockReceipts"
+const (
+	ReceiptsTargetDebugGetRawReceipts           = "debug_getRawReceipts"
+	ReceiptsTargetAlchemyGetTransactionReceipts = "alchemy_getTransactionReceipts"
+	ReceiptsTargetParityGetTransactionReceipts  = "parity_getBlockReceipts"
+	ReceiptsTargetEthGetTransactionReceipts     = "eth_getBlockReceipts"
+)
 
 type ConsensusGetReceiptsResult struct {
 	Method string      `json:"method"`
@@ -743,7 +745,9 @@ func (b *Backend) doForward(ctx context.Context, rpcReqs []*RPCReq, isBatch bool
 	headersToForward := GetHeadersToForward(ctx)
 	if len(headersToForward) != 0 {
 		for k, v := range headersToForward {
-			httpReq.Header[k] = v
+			for _, value := range v {
+				httpReq.Header.Add(k, value)
+			}
 		}
 	}
 
@@ -1688,7 +1692,6 @@ func (bg *BackendGroup) ForwardRequestToBackendGroup(
 		ServedBy: "",
 		error:    ErrNoBackends,
 	}
-
 }
 
 func OverrideResponses(res []*RPCRes, overriddenResponses []*indexedReqRes) []*RPCRes {

@@ -9,7 +9,6 @@ import (
 	"math"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -62,7 +61,7 @@ func Start(config *Config) (*Server, func(), error) {
 
 	// redis read replica client
 	// if read endpoint is not set, use primary endpoint
-	var redisReadClient = redisClient
+	redisReadClient := redisClient
 	if config.Redis.ReadURL != "" {
 		if redisClient == nil {
 			return nil, nil, errors.New("must specify a Redis primary URL. only read endpoint is set")
@@ -331,13 +330,6 @@ func Start(config *Config) (*Server, func(), error) {
 		}
 	}
 
-	var allowedHeadersToForward []string
-	// normilize headers
-	for _, h := range config.AllowedHeadersToForward {
-		allowedHeadersToForward = append(allowedHeadersToForward, strings.ToLower(h))
-	}
-	headersForwarder := NewHeadersForwarder(allowedHeadersToForward)
-
 	var (
 		cache    Cache
 		rpcCache RPCCache
@@ -425,7 +417,7 @@ func Start(config *Config) (*Server, func(), error) {
 		limiterFactory,
 		config.InteropValidationConfig,
 		interopStrategy,
-		headersForwarder,
+		config.AllowedDynamicHeaders,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating server: %w", err)
