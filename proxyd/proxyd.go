@@ -426,6 +426,7 @@ func Start(config *Config) (*Server, func(), error) {
 		config.InteropValidationConfig,
 		interopStrategy,
 		config.AllowedDynamicHeaders,
+		config.VerifyFlashbotsSignature,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error creating server: %w", err)

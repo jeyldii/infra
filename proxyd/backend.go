@@ -130,6 +130,11 @@ var (
 		Message:       "too many requests",
 		HTTPErrorCode: 429,
 	}
+	ErrFlashbotsSignature = &RPCErr{
+		Code:          JSONRPCErrorInternal - 25,
+		Message:       "internal error",
+		HTTPErrorCode: 403,
+	}
 
 	ErrBackendUnexpectedJSONRPC = errors.New("backend returned an unexpected JSON-RPC response")
 

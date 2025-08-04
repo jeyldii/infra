@@ -70,37 +70,37 @@ var (
 )
 
 type Server struct {
-	BackendGroups           map[string]*BackendGroup
-	wsBackendGroup          *BackendGroup
-	wsMethodWhitelist       *StringSet
-	rpcMethodMappings       map[string]string
-	maxBodySize             int64
-	enableRequestLog        bool
-	maxRequestBodyLogLen    int
-	authenticatedPaths      map[string]string
-	timeout                 time.Duration
-	maxUpstreamBatchSize    int
-	maxBatchSize            int
-	enableServedByHeader    bool
-	upgrader                *websocket.Upgrader
-	mainLim                 FrontendRateLimiter
-	highPrioSigners         map[common.Address]bool
-	overrideLims            map[string]FrontendRateLimiter
-	highPrioOverrideLims    map[string]FrontendRateLimiter
-	senderLim               FrontendRateLimiter
-	interopSenderLim        FrontendRateLimiter
-	allowedChainIds         []*big.Int
-	limExemptOrigins        []*regexp.Regexp
-	limExemptUserAgents     []*regexp.Regexp
-	globallyLimitedMethods  map[string]bool
-	rpcServer               *http.Server
-	wsServer                *http.Server
-	cache                   RPCCache
-	srvMu                   sync.Mutex
-	rateLimitHeader         string
-	interopValidatingConfig InteropValidationConfig
-	interopStrategy         InteropStrategy
-	allowedDynamicHeaders   []string
+	BackendGroups            map[string]*BackendGroup
+	wsBackendGroup           *BackendGroup
+	wsMethodWhitelist        *StringSet
+	rpcMethodMappings        map[string]string
+	maxBodySize              int64
+	enableRequestLog         bool
+	maxRequestBodyLogLen     int
+	authenticatedPaths       map[string]string
+	timeout                  time.Duration
+	maxUpstreamBatchSize     int
+	maxBatchSize             int
+	enableServedByHeader     bool
+	upgrader                 *websocket.Upgrader
+	mainLim                  FrontendRateLimiter
+	highPrioSigners         map[common.Address]booloverrideLims             map[string]FrontendRateLimiter
+	highPrioOverrideLimsmap[string]FrontendRateLimiter
+	senderLim                FrontendRateLimiter
+	interopSenderLim         FrontendRateLimiter
+	allowedChainIds          []*big.Int
+	limExemptOrigins         []*regexp.Regexp
+	limExemptUserAgents      []*regexp.Regexp
+	globallyLimitedMethods   map[string]bool
+	rpcServer                *http.Server
+	wsServer                 *http.Server
+	cache                    RPCCache
+	srvMu                    sync.Mutex
+	rateLimitHeader          string
+	interopValidatingConfig  InteropValidationConfig
+	interopStrategy          InteropStrategy
+	allowedDynamicHeaders    []string
+	verifyFlashbotsSignature bool
 }
 
 type limiterFunc func(method string) bool
@@ -130,6 +130,7 @@ func NewServer(
 	interopValidatingConfig InteropValidationConfig,
 	interopStrategy InteropStrategy,
 	allowedDynamicHeaders []string,
+	verifyFlashbotsSignature bool,
 ) (*Server, error) {
 	if cache == nil {
 		cache = &NoopRPCCache{}
@@ -229,20 +230,21 @@ func NewServer(
 		upgrader: &websocket.Upgrader{
 			HandshakeTimeout: defaultWSHandshakeTimeout,
 		},
-		mainLim:                 mainLim,
+		mainLim:                  mainLim,
 		highPrioSigners:         highPrioSingers,
-		overrideLims:            overrideLims,
+		overrideLims:             overrideLims,
 		highPrioOverrideLims:    highPrioOverrideLims,
-		globallyLimitedMethods:  globalMethodLims,
-		senderLim:               senderLim,
-		interopSenderLim:        interopSenderLim,
-		allowedChainIds:         senderRateLimitConfig.AllowedChainIds,
-		limExemptOrigins:        limExemptOrigins,
-		limExemptUserAgents:     limExemptUserAgents,
-		rateLimitHeader:         rateLimitHeader,
-		interopValidatingConfig: interopValidatingConfig,
-		interopStrategy:         interopStrategy,
-		allowedDynamicHeaders:   allowedDynamicHeaders,
+		globallyLimitedMethods:   globalMethodLims,
+		senderLim:                senderLim,
+		interopSenderLim:         interopSenderLim,
+		allowedChainIds:          senderRateLimitConfig.AllowedChainIds,
+		limExemptOrigins:         limExemptOrigins,
+		limExemptUserAgents:      limExemptUserAgents,
+		rateLimitHeader:          rateLimitHeader,
+		interopValidatingConfig:  interopValidatingConfig,
+		interopStrategy:          interopStrategy,
+		allowedDynamicHeaders:    allowedDynamicHeaders,
+		verifyFlashbotsSignature: verifyFlashbotsSignature,
 	}, nil
 }
 
@@ -351,7 +353,7 @@ func (s *Server) HandleRPC(w http.ResponseWriter, r *http.Request) {
 		signer, err = VerifyFlashbotsAuth(flashbotsAuth, body)
 		if err != nil {
 			log.Error("error verifying flashbots auth", "err", err)
-			writeRPCError(ctx, w, nil, ErrInternal)
+			writeRPCError(ctx, w, nil, ErrFlashbotsSignature)
 			return
 		}
 	}

@@ -138,6 +138,7 @@ func TestClientDisconnectionFlow499(t *testing.T) {
 		InteropValidationConfig{},              // interopValidatingConfig
 		NewFirstSupervisorStrategy([]string{}), // interopStrategy
 		[]string{},
+		false,
 	)
 	require.NoError(t, err)
 
