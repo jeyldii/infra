@@ -17,11 +17,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/types/interoptypes"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -38,6 +40,7 @@ const (
 	ContextKeyInteropValidationStrategy             = "interop_validation_strategy"
 	ContextKeyHeadersToForward                      = "headers_to_forward"
 	DefaultOpTxProxyAuthHeader                      = "X-Optimism-Signature"
+	FlashbotsAuthHeader                             = "X-Flashbots-Signature"
 	DefaultMaxBatchRPCCallsLimit                    = 100
 	MaxBatchRPCCallsHardLimit                       = 1000
 	cacheStatusHdr                                  = "X-Proxyd-Cache-Status"
@@ -57,6 +60,11 @@ const (
 )
 
 var emptyArrayResponse = json.RawMessage("[]")
+
+var (
+	ErrNoSignature      = errors.New("no signature provided")
+	ErrInvalidSignature = errors.New("invalid signature provided")
+)
 
 type Server struct {
 	BackendGroups           map[string]*BackendGroup
@@ -342,6 +350,16 @@ func (s *Server) HandleRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	RecordRequestPayloadSize(ctx, len(body))
+
+	flashbotsAuth := r.Header.Get(FlashbotsAuthHeader)
+	if flashbotsAuth != "" {
+		_, err = VerifyFlashbotsAuth(flashbotsAuth, body)
+		if err != nil {
+			log.Error("error verifying flashbots auth", "err", err)
+			writeRPCError(ctx, w, nil, ErrInternal)
+			return
+		}
+	}
 
 	if s.enableRequestLog {
 		log.Info("Raw RPC request",
@@ -1036,4 +1054,55 @@ func createBatchRequest(elems []batchElem) []*RPCReq {
 		batch[i] = elems[i].Req
 	}
 	return batch
+}
+
+// VerifyFlashbotsAuth takes a X-Flashbots-Signature header and a body and verifies that the signature is valid for the body.
+// It returns the signing address if the signature is valid or an error if the signature is invalid.
+func VerifyFlashbotsAuth(header string, body []byte) (common.Address, error) {
+	if header == "" {
+		return common.Address{}, ErrNoSignature
+	}
+
+	parsedSignerStr, parsedSignatureStr, found := strings.Cut(header, ":")
+	if !found {
+		return common.Address{}, fmt.Errorf("%w: missing separator", ErrInvalidSignature)
+	}
+
+	parsedSignature, err := hexutil.Decode(parsedSignatureStr)
+	if err != nil || len(parsedSignature) == 0 {
+		return common.Address{}, fmt.Errorf("%w: %w", ErrInvalidSignature, err)
+	}
+
+	if parsedSignature[len(parsedSignature)-1] >= 27 {
+		parsedSignature[len(parsedSignature)-1] -= 27
+	}
+	if parsedSignature[len(parsedSignature)-1] > 1 {
+		return common.Address{}, fmt.Errorf("%w: invalid recovery id", ErrInvalidSignature)
+	}
+
+	hashedBody := crypto.Keccak256Hash(body).Hex()
+	messageHash := accounts.TextHash([]byte(hashedBody))
+	recoveredPublicKeyBytes, err := crypto.Ecrecover(messageHash, parsedSignature)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("%w: %w", ErrInvalidSignature, err)
+	}
+
+	recoveredPublicKey, err := crypto.UnmarshalPubkey(recoveredPublicKeyBytes)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("%w: %w", ErrInvalidSignature, err)
+	}
+	recoveredSigner := crypto.PubkeyToAddress(*recoveredPublicKey)
+
+	// case-insensitive equality check
+	parsedSigner := common.HexToAddress(parsedSignerStr)
+	if recoveredSigner.Cmp(parsedSigner) != 0 {
+		return common.Address{}, fmt.Errorf("%w: signing address mismatch", ErrInvalidSignature)
+	}
+
+	signatureNoRecoverID := parsedSignature[:len(parsedSignature)-1] // remove recovery id
+	if !crypto.VerifySignature(recoveredPublicKeyBytes, messageHash, signatureNoRecoverID) {
+		return common.Address{}, fmt.Errorf("%w: %w", ErrInvalidSignature, err)
+	}
+
+	return recoveredSigner, nil
 }
