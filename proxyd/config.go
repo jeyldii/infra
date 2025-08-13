@@ -27,6 +27,7 @@ type ServerConfig struct {
 	MaxUpstreamBatchSize int `toml:"max_upstream_batch_size"`
 
 	EnableRequestLog      bool `toml:"enable_request_log"`
+	LimitAllRPC           bool `toml:"limit_all_rpc"`
 	MaxRequestBodyLogLen  int  `toml:"max_request_body_log_len"`
 	EnablePprof           bool `toml:"enable_pprof"`
 	EnableXServedByHeader bool `toml:"enable_served_by_header"`
@@ -217,6 +218,8 @@ type Config struct {
 	Redis                   RedisConfig             `toml:"redis"`
 	Metrics                 MetricsConfig           `toml:"metrics"`
 	RateLimit               RateLimitConfig         `toml:"rate_limit"`
+	HighPrioRateLimit       RateLimitConfig         `toml:"high_prio_rate_limit"`
+	HighPrioSigners         []string                `toml:"high_prio_signers"`
 	BackendOptions          BackendOptions          `toml:"backend"`
 	Backends                BackendsConfig          `toml:"backends"`
 	BatchConfig             BatchConfig             `toml:"batch"`

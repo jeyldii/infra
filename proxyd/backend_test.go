@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -117,13 +118,16 @@ func TestClientDisconnectionFlow499(t *testing.T) {
 		backendGroup,
 		NewStringSetFromStrings([]string{"eth_blockNumber"}),
 		rpcMethodMappings,
-		1024*1024,               // maxBodySize
-		map[string]string{},     // authenticatedPaths
-		5*time.Second,           // timeout - longer than our test
-		10,                      // maxUpstreamBatchSize
-		false,                   // enableServedByHeader
-		&NoopRPCCache{},         // cache
-		RateLimitConfig{},       // rateLimitConfig
+		1024*1024,           // maxBodySize
+		map[string]string{}, // authenticatedPaths
+		5*time.Second,       // timeout - longer than our test
+		10,                  // maxUpstreamBatchSize
+		false,               // enableServedByHeader
+		&NoopRPCCache{},     // cache
+		RateLimitConfig{},   // rateLimitConfig
+		RateLimitConfig{},
+		make(map[common.Address]bool),
+		false,
 		SenderRateLimitConfig{}, // senderRateLimitConfig
 		SenderRateLimitConfig{}, // interopSenderRateLimitConfig
 		false,                   // enableRequestLog

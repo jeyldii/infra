@@ -59,7 +59,10 @@ const (
 	defaultInteropLoadBalancingUnhealthinessTimeout = 10 * time.Second
 )
 
-var emptyArrayResponse = json.RawMessage("[]")
+var (
+	emptyArrayResponse = json.RawMessage("[]")
+	nullAddress        = common.Address{}
+)
 
 var (
 	ErrNoSignature      = errors.New("no signature provided")
@@ -81,6 +84,9 @@ type Server struct {
 	enableServedByHeader    bool
 	upgrader                *websocket.Upgrader
 	mainLim                 FrontendRateLimiter
+	highPrioMainLim         FrontendRateLimiter
+	highPrioSigners         map[common.Address]bool
+	limitedAll              bool
 	overrideLims            map[string]FrontendRateLimiter
 	senderLim               FrontendRateLimiter
 	interopSenderLim        FrontendRateLimiter
@@ -114,6 +120,9 @@ func NewServer(
 	enableServedByHeader bool,
 	cache RPCCache,
 	rateLimitConfig RateLimitConfig,
+	highPrioRateLimitConfig RateLimitConfig,
+	highPrioSingers map[common.Address]bool,
+	limitedAll bool,
 	senderRateLimitConfig SenderRateLimitConfig,
 	interopSenderRateLimitConfig SenderRateLimitConfig,
 	enableRequestLog bool,
@@ -171,6 +180,13 @@ func NewServer(
 		mainLim = NoopFrontendRateLimiter
 	}
 
+	var highPrioMainLim FrontendRateLimiter
+	if highPrioRateLimitConfig.BaseRate > 0 {
+		highPrioMainLim = limiterFactory(time.Duration(highPrioRateLimitConfig.BaseInterval), highPrioRateLimitConfig.BaseRate, "main_high_prio")
+	} else {
+		highPrioMainLim = NoopFrontendRateLimiter
+	}
+
 	overrideLims := make(map[string]FrontendRateLimiter)
 	globalMethodLims := make(map[string]bool)
 	for method, override := range rateLimitConfig.MethodOverrides {
@@ -213,6 +229,9 @@ func NewServer(
 			HandshakeTimeout: defaultWSHandshakeTimeout,
 		},
 		mainLim:                 mainLim,
+		highPrioMainLim:         highPrioMainLim,
+		highPrioSigners:         highPrioSingers,
+		limitedAll:              limitedAll,
 		overrideLims:            overrideLims,
 		globallyLimitedMethods:  globalMethodLims,
 		senderLim:               senderLim,
@@ -303,31 +322,6 @@ func (s *Server) HandleRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isLimited := func(method string) bool {
-		isGloballyLimitedMethod := s.isGlobalLimit(method)
-		if !isGloballyLimitedMethod && (isUnlimitedOrigin || isUnlimitedUserAgent) {
-			return false
-		}
-
-		var lim FrontendRateLimiter
-		if method == "" {
-			lim = s.mainLim
-		} else {
-			lim = s.overrideLims[method]
-		}
-
-		if lim == nil {
-			return false
-		}
-
-		ok, err := lim.Take(ctx, xff)
-		if err != nil {
-			log.Warn("error taking rate limit", "err", err)
-			return true
-		}
-		return !ok
-	}
-
 	log.Debug(
 		"received RPC request",
 		"req_id", GetReqID(ctx),
@@ -352,13 +346,43 @@ func (s *Server) HandleRPC(w http.ResponseWriter, r *http.Request) {
 	RecordRequestPayloadSize(ctx, len(body))
 
 	flashbotsAuth := r.Header.Get(FlashbotsAuthHeader)
+	var signer common.Address
 	if flashbotsAuth != "" {
-		_, err = VerifyFlashbotsAuth(flashbotsAuth, body)
+		signer, err = VerifyFlashbotsAuth(flashbotsAuth, body)
 		if err != nil {
 			log.Error("error verifying flashbots auth", "err", err)
 			writeRPCError(ctx, w, nil, ErrInternal)
 			return
 		}
+	}
+
+	isLimited := func(method string) bool {
+		isGloballyLimitedMethod := s.isGlobalLimit(method)
+		if !isGloballyLimitedMethod && (isUnlimitedOrigin || isUnlimitedUserAgent) {
+			return false
+		}
+
+		var lim FrontendRateLimiter
+		if method == "" {
+			if s.highPrioSigners[signer] {
+				lim = s.highPrioMainLim
+			} else {
+				lim = s.mainLim
+			}
+		} else {
+			lim = s.overrideLims[method]
+		}
+
+		if lim == nil {
+			return false
+		}
+
+		ok, err := lim.Take(ctx, xff)
+		if err != nil {
+			log.Warn("error taking rate limit", "err", err)
+			return true
+		}
+		return !ok
 	}
 
 	if s.enableRequestLog {
@@ -821,7 +845,7 @@ func (s *Server) isUnlimitedUserAgent(origin string) bool {
 }
 
 func (s *Server) isGlobalLimit(method string) bool {
-	return s.globallyLimitedMethods[method]
+	return s.globallyLimitedMethods[method] || s.limitedAll
 }
 
 // convertSendReqToSendTx converts a sendRawTransaction or sendRawTransactionConditional rpc to a transaction.

@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -397,6 +398,11 @@ func Start(config *Config) (*Server, func(), error) {
 		return nil, nil, fmt.Errorf("invalid interop validating strategy: %s", config.InteropValidationConfig.Strategy)
 	}
 
+	highPrioSigners := make(map[common.Address]bool, len(config.HighPrioSigners))
+	for _, s := range config.HighPrioSigners {
+		highPrioSigners[common.HexToAddress(s)] = true
+	}
+
 	srv, err := NewServer(
 		backendGroups,
 		wsBackendGroup,
@@ -409,6 +415,9 @@ func Start(config *Config) (*Server, func(), error) {
 		config.Server.EnableXServedByHeader,
 		rpcCache,
 		config.RateLimit,
+		config.HighPrioRateLimit,
+		highPrioSigners,
+		config.Server.LimitAllRPC,
 		config.SenderRateLimit,
 		config.InteropValidationConfig.RateLimit,
 		config.Server.EnableRequestLog,
