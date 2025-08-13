@@ -84,8 +84,9 @@ type Server struct {
 	enableServedByHeader     bool
 	upgrader                 *websocket.Upgrader
 	mainLim                  FrontendRateLimiter
-	highPrioSigners         map[common.Address]booloverrideLims             map[string]FrontendRateLimiter
-	highPrioOverrideLimsmap[string]FrontendRateLimiter
+	highPrioSigners          map[common.Address]bool
+	overrideLims             map[string]FrontendRateLimiter
+	highPrioOverrideLims     map[string]FrontendRateLimiter
 	senderLim                FrontendRateLimiter
 	interopSenderLim         FrontendRateLimiter
 	allowedChainIds          []*big.Int
@@ -231,9 +232,9 @@ func NewServer(
 			HandshakeTimeout: defaultWSHandshakeTimeout,
 		},
 		mainLim:                  mainLim,
-		highPrioSigners:         highPrioSingers,
+		highPrioSigners:          highPrioSingers,
 		overrideLims:             overrideLims,
-		highPrioOverrideLims:    highPrioOverrideLims,
+		highPrioOverrideLims:     highPrioOverrideLims,
 		globallyLimitedMethods:   globalMethodLims,
 		senderLim:                senderLim,
 		interopSenderLim:         interopSenderLim,
