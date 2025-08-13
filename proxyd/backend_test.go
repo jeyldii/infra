@@ -127,7 +127,6 @@ func TestClientDisconnectionFlow499(t *testing.T) {
 		RateLimitConfig{},   // rateLimitConfig
 		RateLimitConfig{},
 		make(map[common.Address]bool),
-		false,
 		SenderRateLimitConfig{}, // senderRateLimitConfig
 		SenderRateLimitConfig{}, // interopSenderRateLimitConfig
 		false,                   // enableRequestLog

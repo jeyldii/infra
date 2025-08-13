@@ -84,10 +84,9 @@ type Server struct {
 	enableServedByHeader    bool
 	upgrader                *websocket.Upgrader
 	mainLim                 FrontendRateLimiter
-	highPrioMainLim         FrontendRateLimiter
 	highPrioSigners         map[common.Address]bool
-	limitedAll              bool
 	overrideLims            map[string]FrontendRateLimiter
+	highPrioOverrideLims    map[string]FrontendRateLimiter
 	senderLim               FrontendRateLimiter
 	interopSenderLim        FrontendRateLimiter
 	allowedChainIds         []*big.Int
@@ -122,7 +121,6 @@ func NewServer(
 	rateLimitConfig RateLimitConfig,
 	highPrioRateLimitConfig RateLimitConfig,
 	highPrioSingers map[common.Address]bool,
-	limitedAll bool,
 	senderRateLimitConfig SenderRateLimitConfig,
 	interopSenderRateLimitConfig SenderRateLimitConfig,
 	enableRequestLog bool,
@@ -161,7 +159,7 @@ func NewServer(
 	limExemptOrigins := make([]*regexp.Regexp, 0)
 	limExemptUserAgents := make([]*regexp.Regexp, 0)
 	if rateLimitConfig.BaseRate > 0 {
-		mainLim = limiterFactory(time.Duration(rateLimitConfig.BaseInterval), rateLimitConfig.BaseRate, "main")
+		mainLim = limiterFactory(time.Duration(rateLimitConfig.BaseInterval), rateLimitConfig.BaseRate, rateLimitConfig.Namespace+"-"+"main")
 		for _, origin := range rateLimitConfig.ExemptOrigins {
 			pattern, err := regexp.Compile(origin)
 			if err != nil {
@@ -180,22 +178,25 @@ func NewServer(
 		mainLim = NoopFrontendRateLimiter
 	}
 
-	var highPrioMainLim FrontendRateLimiter
-	if highPrioRateLimitConfig.BaseRate > 0 {
-		highPrioMainLim = limiterFactory(time.Duration(highPrioRateLimitConfig.BaseInterval), highPrioRateLimitConfig.BaseRate, "main_high_prio")
-	} else {
-		highPrioMainLim = NoopFrontendRateLimiter
-	}
-
 	overrideLims := make(map[string]FrontendRateLimiter)
+	highPrioOverrideLims := make(map[string]FrontendRateLimiter)
 	globalMethodLims := make(map[string]bool)
 	for method, override := range rateLimitConfig.MethodOverrides {
-		overrideLims[method] = limiterFactory(time.Duration(override.Interval), override.Limit, method)
+		overrideLims[method] = limiterFactory(time.Duration(override.Interval), override.Limit, rateLimitConfig.Namespace+"-"+method)
 
 		if override.Global {
 			globalMethodLims[method] = true
 		}
 	}
+
+	for method, override := range highPrioRateLimitConfig.MethodOverrides {
+		highPrioOverrideLims[method] = limiterFactory(time.Duration(override.Interval), override.Limit, highPrioRateLimitConfig.Namespace+"-"+method)
+
+		if override.Global {
+			globalMethodLims[method] = true
+		}
+	}
+
 	var senderLim FrontendRateLimiter
 	if senderRateLimitConfig.Enabled {
 		senderLim = limiterFactory(time.Duration(senderRateLimitConfig.Interval), senderRateLimitConfig.Limit, "senders")
@@ -229,10 +230,9 @@ func NewServer(
 			HandshakeTimeout: defaultWSHandshakeTimeout,
 		},
 		mainLim:                 mainLim,
-		highPrioMainLim:         highPrioMainLim,
 		highPrioSigners:         highPrioSingers,
-		limitedAll:              limitedAll,
 		overrideLims:            overrideLims,
+		highPrioOverrideLims:    highPrioOverrideLims,
 		globallyLimitedMethods:  globalMethodLims,
 		senderLim:               senderLim,
 		interopSenderLim:        interopSenderLim,
@@ -362,15 +362,16 @@ func (s *Server) HandleRPC(w http.ResponseWriter, r *http.Request) {
 			return false
 		}
 
+		isHighPrio := s.highPrioSigners[signer]
 		var lim FrontendRateLimiter
 		if method == "" {
-			if s.highPrioSigners[signer] {
-				lim = s.highPrioMainLim
-			} else {
-				lim = s.mainLim
-			}
+			lim = s.mainLim
 		} else {
-			lim = s.overrideLims[method]
+			if isHighPrio {
+				lim = s.highPrioOverrideLims[method]
+			} else {
+				lim = s.overrideLims[method]
+			}
 		}
 
 		if lim == nil {
@@ -845,7 +846,7 @@ func (s *Server) isUnlimitedUserAgent(origin string) bool {
 }
 
 func (s *Server) isGlobalLimit(method string) bool {
-	return s.globallyLimitedMethods[method] || s.limitedAll
+	return s.globallyLimitedMethods[method]
 }
 
 // convertSendReqToSendTx converts a sendRawTransaction or sendRawTransactionConditional rpc to a transaction.

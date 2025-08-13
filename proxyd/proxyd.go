@@ -354,7 +354,7 @@ func Start(config *Config) (*Server, func(), error) {
 	}
 
 	limiterFactory := func(dur time.Duration, max int, prefix string) FrontendRateLimiter {
-		if config.RateLimit.UseRedis {
+		if config.RateLimit.UseRedis || config.HighPrioRateLimit.UseRedis {
 			limiter := NewRedisFrontendRateLimiter(redisClient, dur, max, prefix)
 
 			if config.Redis.FallbackToMemory {
@@ -417,7 +417,6 @@ func Start(config *Config) (*Server, func(), error) {
 		config.RateLimit,
 		config.HighPrioRateLimit,
 		highPrioSigners,
-		config.Server.LimitAllRPC,
 		config.SenderRateLimit,
 		config.InteropValidationConfig.RateLimit,
 		config.Server.EnableRequestLog,
