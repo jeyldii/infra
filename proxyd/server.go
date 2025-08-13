@@ -160,7 +160,7 @@ func NewServer(
 	limExemptOrigins := make([]*regexp.Regexp, 0)
 	limExemptUserAgents := make([]*regexp.Regexp, 0)
 	if rateLimitConfig.BaseRate > 0 {
-		mainLim = limiterFactory(time.Duration(rateLimitConfig.BaseInterval), rateLimitConfig.BaseRate, rateLimitConfig.Namespace+"-"+"main")
+		mainLim = limiterFactory(time.Duration(rateLimitConfig.BaseInterval), rateLimitConfig.BaseRate, "main")
 		for _, origin := range rateLimitConfig.ExemptOrigins {
 			pattern, err := regexp.Compile(origin)
 			if err != nil {
@@ -183,7 +183,7 @@ func NewServer(
 	highPrioOverrideLims := make(map[string]FrontendRateLimiter)
 	globalMethodLims := make(map[string]bool)
 	for method, override := range rateLimitConfig.MethodOverrides {
-		overrideLims[method] = limiterFactory(time.Duration(override.Interval), override.Limit, rateLimitConfig.Namespace+"-"+method)
+		overrideLims[method] = limiterFactory(time.Duration(override.Interval), override.Limit, method)
 
 		if override.Global {
 			globalMethodLims[method] = true
@@ -191,7 +191,7 @@ func NewServer(
 	}
 
 	for method, override := range highPrioRateLimitConfig.MethodOverrides {
-		highPrioOverrideLims[method] = limiterFactory(time.Duration(override.Interval), override.Limit, highPrioRateLimitConfig.Namespace+"-"+method)
+		highPrioOverrideLims[method] = limiterFactory(time.Duration(override.Interval), override.Limit, method)
 
 		if override.Global {
 			globalMethodLims[method] = true
