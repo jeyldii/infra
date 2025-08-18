@@ -132,7 +132,7 @@ var (
 	}
 	ErrFlashbotsSignature = &RPCErr{
 		Code:          JSONRPCErrorInternal - 25,
-		Message:       "internal error",
+		Message:       "invalid flashbots signature",
 		HTTPErrorCode: 403,
 	}
 
